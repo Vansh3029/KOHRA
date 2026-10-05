@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KOHRA - fog-of-war decision trainer</title>
+<style>
+:root{
+  --paper:#DCE4D5; --terrain:#E9EFE3; --terrain2:#D3DDCB; --water:#B7CEDA; --ink:#1B2820; --ink2:#46564B;
+  --panel:#F7F9F3; --panel2:#EDF1E7; --line:#BAC5B4; --accent:#B8650F; --accent-ink:#FFFFFF;
+  --friendly:#2F6DA3; --hostile:#B93A27; --cyber:#1B7F79; --ok:#3F7A33; --warn:#B8650F; --bad:#B93A27;
+  --fog:#F4F6F1; --hatch:#9DAE92;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+  --sans:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#101914; --terrain:#18241D; --terrain2:#213128; --water:#1F3A47; --ink:#E4ECE1; --ink2:#A4B3A8;
+    --panel:#1A261F; --panel2:#223128; --line:#38493F; --accent:#E59A3D; --accent-ink:#1A1208;
+    --friendly:#6FA8DC; --hostile:#EE7A66; --cyber:#4CC2B9; --ok:#82C46F; --warn:#E59A3D; --bad:#EE7A66;
+    --fog:#2B3A31; --hatch:#42564A;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#101914; --terrain:#18241D; --terrain2:#213128; --water:#1F3A47; --ink:#E4ECE1; --ink2:#A4B3A8;
+  --panel:#1A261F; --panel2:#223128; --line:#38493F; --accent:#E59A3D; --accent-ink:#1A1208;
+  --friendly:#6FA8DC; --hostile:#EE7A66; --cyber:#4CC2B9; --ok:#82C46F; --warn:#E59A3D; --bad:#EE7A66;
+  --fog:#2B3A31; --hatch:#42564A;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
+*,*::before,*::after{box-sizing:border-box}
+body{height:100%;margin:0;background:var(--paper);color:var(--ink);font:14px/1.45 var(--sans)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#app{display:flex;flex-direction:column;height:100%;min-height:0}
+h1,h2,h3{font-family:var(--serif);font-weight:600;margin:0}
+h3{font-size:15px;margin-bottom:8px}
+.top{display:flex;align-items:center;gap:14px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.brand{font-family:var(--serif);font-style:italic;font-size:22px;letter-spacing:.02em}
+.scn{color:var(--ink2);font-size:13px}
+.clock{font-variant-numeric:tabular-nums;font-size:20px;font-weight:600;min-width:84px}
+.pill{display:inline-block;padding:2px 10px;border-radius:999px;border:1px solid var(--line);font-size:12px;background:var(--panel2)}
+.pill.run{border-color:var(--ok);color:var(--ok)} .pill.end{border-color:var(--bad);color:var(--bad)}
+.sp{flex:1}
+.btn{border:1px solid var(--line);background:var(--panel2);padding:6px 12px;border-radius:6px;cursor:pointer}
+.btn:hover{border-color:var(--ink2)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn.danger{border-color:var(--bad);color:var(--bad)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn.sm{padding:3px 8px;font-size:12px}
+select,input[type=text]{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+.main{flex:1;min-height:0;overflow:auto}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;min-height:0}
+.muted{color:var(--ink2)}
+.small{font-size:12px}
+
+/* lobby */
+.lobby{max-width:980px;margin:0 auto;padding:28px 18px 40px}
+.lobby h1{font-size:44px;font-style:italic;line-height:1.05}
+.lobby .lede{font-size:17px;max-width:62ch;margin:10px 0 22px;color:var(--ink2)}
+.lobby .row{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin-bottom:18px}
+.lobby label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--ink2)}
+.roles{display:grid;grid-template-columns:repeat(auto-fit,minmax(176px,1fr));gap:12px}
+.role{text-align:left;cursor:pointer;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:6px}
+.role:hover{border-color:var(--accent)}
+.role .rn{font-family:var(--serif);font-size:17px;font-weight:600}
+.role .rd{color:var(--ink2);font-size:13px}
+.role .who{font-size:12px;color:var(--ok)}
+.modeline{margin:0 0 16px;padding:8px 12px;border-left:3px solid var(--accent);background:var(--panel2);border-radius:0 6px 6px 0}
+
+/* trainee */
+.trainee{display:grid;grid-template-columns:minmax(0,1fr) 380px;grid-template-rows:minmax(0,1fr) auto;grid-template-areas:"stage rail" "orders rail";gap:10px;padding:10px;height:100%}
+.stage{grid-area:stage;position:relative;min-height:240px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--paper)}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
+.brief{position:absolute;left:10px;top:10px;max-width:330px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;opacity:.96}
+.brief b{font-family:var(--serif);font-size:14px}
+.brief button{float:right}
+.legend{position:absolute;right:10px;bottom:8px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12px;color:var(--ink2);display:flex;gap:12px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;margin-right:4px;vertical-align:-1px}
+.rail{grid-area:rail;display:flex;flex-direction:column;gap:10px;min-height:0;overflow:auto}
+.rail>.panel{flex-shrink:0}
+.rail .grow{flex:1 0 auto;min-height:240px;display:flex;flex-direction:column}
+.rail .grow .feed{max-height:340px}
+.chans{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.chans li{display:grid;grid-template-columns:112px 1fr auto;gap:8px;align-items:center;font-size:13px}
+.bar{height:6px;background:var(--panel2);border-radius:3px;overflow:hidden;border:1px solid var(--line)}
+.bar>span{display:block;height:100%;background:var(--ok);transition:width .4s}
+.bar.mid>span{background:var(--warn)} .bar.low>span{background:var(--bad)}
+.chans .age{font-variant-numeric:tabular-nums;color:var(--ink2);font-size:12px;min-width:74px;text-align:right}
+.log{list-style:none;margin:0;padding:0;overflow:auto;flex:1;display:flex;flex-direction:column;gap:6px;min-height:120px}
+.msg{border:1px solid var(--line);border-left-width:4px;border-radius:6px;padding:6px 8px;background:var(--panel2)}
+.msg.ch-radio{border-left-color:var(--friendly)} .msg.ch-datalink{border-left-color:#8A63D2} .msg.ch-cybernet{border-left-color:var(--cyber)} .msg.ch-spectrum{border-left-color:var(--warn)} .msg.ch-teamnet{border-left-color:var(--ink2)}
+.msg .meta{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--ink2)}
+.msg .src{font-weight:600;color:var(--ink)}
+.msg .src.unc{color:var(--hostile)}
+.msg p{margin:2px 0 0}
+.msg .acts{margin-top:4px;display:flex;gap:6px}
+.msg.fresh{animation:flash 2.4s ease-out 1}
+@keyframes flash{from{background:color-mix(in srgb,var(--accent) 30%,var(--panel2))}to{background:var(--panel2)}}
+@media (prefers-reduced-motion:reduce){.msg.fresh{animation:none}.bar>span{transition:none}}
+.chatf{display:flex;gap:6px;margin-top:8px}
+.chatf input{flex:1;min-width:0}
+.orders{grid-area:orders}
+.orders .cols{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px}
+.seg{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.seg button{border:1px solid var(--line);background:var(--panel2);border-radius:6px;padding:6px 10px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.fields{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-bottom:6px}
+.fields label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--ink2)}
+.target{font-size:13px;margin:4px 0}
+.warn{color:var(--bad);font-weight:600}
+.feedback{min-height:20px;font-size:13px;margin-top:6px}
+.feedback.err{color:var(--bad)}
+.olist{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:13px}
+.olist li{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed var(--line);padding-bottom:3px}
+.olist .st.ok{color:var(--ok)} .olist .st.wait{color:var(--ink2)} .olist .st.noack{color:var(--warn)}
+
+/* instructor */
+.instr{display:grid;grid-template-columns:minmax(0,1fr) 420px;grid-template-rows:auto minmax(0,1fr);grid-template-areas:"ctl ctl" "stage rail";gap:10px;padding:10px;height:100%}
+.ictl{grid-area:ctl;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.ictl .grp{display:flex;gap:6px;align-items:center}
+.sliders{display:grid;grid-template-columns:96px repeat(3,1fr);gap:4px 8px;align-items:center;font-size:12px}
+.sliders .h{color:var(--ink2)}
+.sliders input[type=range]{width:100%;accent-color:var(--accent)}
+.injects{display:flex;flex-wrap:wrap;gap:6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{border:1px solid var(--warn);color:var(--warn);border-radius:999px;padding:1px 10px;font-size:12px}
+.feed{list-style:none;margin:0;padding:0;overflow:auto;display:grid;gap:6px;font-size:13px}
+.feed li{border-bottom:1px dashed var(--line);padding-bottom:4px}
+.score{display:inline-block;min-width:34px;text-align:center;border-radius:4px;padding:0 6px;font-weight:600;font-size:12px;color:#fff}
+.score.hi{background:var(--ok)} .score.mid{background:var(--warn)} .score.lo{background:var(--bad)} .score.na{background:var(--ink2)}
+.tog{display:flex;gap:6px;align-items:center;font-size:13px}
+
+/* AAR */
+.aar{max-width:1100px;margin:0 auto;padding:18px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:12px 0 18px}
+.tile{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:10px 12px}
+.tile .v{font-family:var(--serif);font-size:30px;line-height:1.1}
+.tile .l{color:var(--ink2);font-size:12px}
+.aar h2{font-size:22px;margin:22px 0 6px}
+.aar table{width:100%;border-collapse:collapse;font-size:13px}
+.aar th,.aar td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.aar th{font-weight:600;color:var(--ink2);font-size:12px}
+.aar .scroll{overflow-x:auto}
+.chart{width:100%;height:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.keys{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin:6px 0}
+.keys i{display:inline-block;width:14px;height:3px;margin-right:5px;vertical-align:middle}
+.evlist{columns:2;font-size:13px;color:var(--ink2);padding-left:18px}
+.exports{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+textarea.raw{width:100%;min-height:120px;font-size:12px;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.kn{color:var(--ink2);font-size:12px}
+
+@media (max-width:900px){
+  .trainee,.instr{grid-template-columns:1fr;grid-template-rows:auto;height:auto}
+  .trainee{grid-template-areas:"stage" "orders" "rail"}
+  .instr{grid-template-areas:"ctl" "stage" "rail"}
+  .stage{height:62vw;min-height:280px}
+  .orders .cols{grid-template-columns:1fr}
+  .rail{overflow:visible}
+  .evlist{columns:1}
+  .legend{display:none}
+}
+@media print{
+  .top,.noprint{display:none!important}
+  :root{--paper:#fff;--panel:#fff;--ink:#000;--line:#bbb}
+  body{height:auto}
+  #app,.main{display:block;height:auto;overflow:visible}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="engine.js"></script>
+<script>
+(function () {
+'use strict';
+var K = window.Kohra;
+var $ = function (s, r) { return (r || document).querySelector(s); };
+var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function fmtT(t) { return K.fmtT(t); }
+function fmtAge(s) { s = Math.max(0, Math.round(s)); var m = Math.floor(s / 60), r = s % 60; return m + ':' + (r < 10 ? '0' : '') + r; }
+
+var ROLE_COLOR = { coy: '#3E7CB1', air: '#8A63D2', cyber: '#1F8F89', ew: '#C9741A' };
+var ROLE_BLURB = {
+  coy: 'You command the company at the bridge. Recce and UAV reports reach you; your orders to the platoons go out over the radio net.',
+  air: 'You task the UAV and close air support over the datalink. Check where the target really is before you strike.',
+  cyber: 'You defend the networks. Decide when isolating the UAV datalink is worth losing it.',
+  ew: 'You watch the spectrum. Spot jamming early and decide when a frequency hop will help.'
+};
+var ORDER_LABEL = { move: 'Move unit', fire: 'Fire on target', hold: 'Hold unit', strike: 'Air strike', recce: 'UAV recce', cscan: 'Scan networks', isolate: 'Isolate datalink', restore: 'Restore datalink', escan: 'Scan spectrum', hop: 'Frequency hop' };
+var ORDER_HINT = {
+  move: 'Pick a destination on the map.', fire: 'Pick a target. Range 30, blast radius 6. Anything of yours inside the radius is hit too.',
+  hold: 'The unit stops where it is.', strike: 'Pick a target. Takes about 20 s once tasking arrives; blast radius 6.',
+  recce: 'Pick an area. The UAV looks within 15 units and reports back.', cscan: 'Checks the networks for unauthorised access.',
+  isolate: 'Cuts the UAV datalink for 45 s. Stops an intrusion, but nobody gets UAV reports meanwhile.', restore: 'Brings the datalink back.',
+  escan: 'Checks the radio and datalink bands for jamming.', hop: 'Reduces jamming on the radio net for 60 s.'
+};
+var NEEDS_POS = { move: 1, fire: 1, strike: 1, recce: 1 };
+var NEEDS_UNIT = { move: 1, fire: 1, hold: 1 };
+
+// ------------------------------------------------------------ app state
+var app = { link: null, mode: 'local', server: null, role: null, name: '', scene: null, view: null, screen: 'lobby', aar: null,
+  sel: { type: null, unit: 'B', target: null }, seen: {}, feedback: null, briefOpen: true, room: 'DEMO', aarTimer: null, themePref: 'auto' };
+var qs = new URLSearchParams(location.search);
+
+// ------------------------------------------------------------ links
+function LocalLink() {
+  var self = this;
+  this.room = K.createRoom('LOCAL');
+  this.client = { id: 'local', send: function (m) { setTimeout(function () { onMessage(m); }, 0); } };
+  this.timer = setInterval(function () { self.room.step(0.25); }, 250);
+  this.send = function (m) { self.room.handle(self.client, JSON.parse(JSON.stringify(m))); };
+}
+function WsLink(room) {
+  var self = this, queue = [];
+  var proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+  var base = location.pathname.replace(/[^/]*$/, '');
+  this.ws = new WebSocket(proto + location.host + base + 'ws?room=' + encodeURIComponent(room));
+  this.ws.onopen = function () { queue.forEach(function (m) { self.ws.send(m); }); queue = []; };
+  this.ws.onmessage = function (e) { try { onMessage(JSON.parse(e.data)); } catch (x) { /* ignore */ } };
+  this.ws.onclose = function () { toast('Connection to the server closed. Reload to reconnect.'); };
+  this.send = function (m) { var s = JSON.stringify(m); if (self.ws.readyState === 1) self.ws.send(s); else queue.push(s); };
+}
+
+function detectServer() {
+  if (location.protocol === 'file:' || qs.get('mode') === 'local') return Promise.resolve(null);
+  var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  var to = setTimeout(function () { if (ctl) ctl.abort(); }, 1500);
+  return fetch('api/ping', { cache: 'no-store', signal: ctl ? ctl.signal : undefined }).then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (j) { clearTimeout(to); return j && j.name === 'kohra' ? j : null; }).catch(function () { clearTimeout(to); return null; });
+}
+
+function toast(text) {
+  var t = $('#toast');
+  if (!t) { t = document.createElement('div'); t.id = 'toast'; t.setAttribute('role', 'status'); t.style.cssText = 'position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:8px 14px;border-radius:8px;z-index:9;font-size:13px;max-width:90vw'; document.body.appendChild(t); }
+  t.textContent = text; t.style.display = 'block';
+  clearTimeout(t._h); t._h = setTimeout(function () { t.style.display = 'none'; }, 4200);
+}
+
+// ------------------------------------------------------------ messages from room
+function onMessage(m) {
+  if (m.t === 'joined') {
+    app.scene = m.scene; app.role = m.role; app.view = null;
+    app.sel = { type: null, unit: 'B', target: null }; app.seen = {}; app.feedback = null; app._briefAuto = false; app.briefOpen = true;
+    app.screen = m.role === 'instructor' ? 'instr' : 'trainee';
+    stopAarTimer(); buildScreen();
+  } else if (m.t === 'view') {
+    app.view = m.view;
+    if (app.screen === 'trainee' && m.view.kind === 'trainee') updateTrainee();
+    else if (app.screen === 'instr' && m.view.kind === 'instructor') updateInstructor();
+    updateHeader();
+  } else if (m.t === 'orderResult') {
+    app.feedback = m.ok ? { ok: true, text: 'Order sent. Wait for an acknowledgement.' } : { ok: false, text: m.error || 'Order refused.' };
+    if (m.ok) { app.sel.target = null; }
+    if (app.screen === 'trainee') { updateTrainee(true); }
+  } else if (m.t === 'aar') {
+    app.aar = m.report;
+    if (app.screen === 'aar') renderAar();
+  } else if (m.t === 'error') toast(m.text);
+}
+
+// ------------------------------------------------------------ header
+function headerHtml() {
+  var roleOpts = ['instructor'].concat(Object.keys(app.scene.roles)).map(function (r) {
+    var label = r === 'instructor' ? 'Instructor' : app.scene.roles[r].label;
+    return '<option value="' + r + '"' + (r === app.role ? ' selected' : '') + '>' + esc(label) + '</option>';
+  }).join('');
+  return '<header class="top"><span class="brand">Kohra</span><span class="scn">' + esc(app.scene.name) + '</span>' +
+    '<span class="clock" id="clock">T+00:00</span><span class="pill" id="status">Not started</span><span class="sp"></span>' +
+    '<label class="small muted" for="roleSel">Playing as </label><select id="roleSel" aria-label="Switch role">' + roleOpts + '</select>' +
+    '<button class="btn" id="aarBtn">After-action review</button>' +
+    '<button class="btn" id="themeBtn" aria-label="Change theme">Theme: ' + app.themePref + '</button></header>';
+}
+function bindHeader() {
+  $('#roleSel').onchange = function (e) { join(e.target.value); };
+  $('#aarBtn').onclick = function () { if (app.screen === 'aar') backToExercise(); else openAar(); };
+  $('#themeBtn').onclick = function () {
+    var order = ['auto', 'light', 'dark'], i = (order.indexOf(app.themePref) + 1) % 3; app.themePref = order[i];
+    if (app.themePref === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', app.themePref);
+    $('#themeBtn').textContent = 'Theme: ' + app.themePref; refreshColors();
+  };
+}
+function updateHeader() {
+  var v = app.view; if (!v || !$('#clock')) return;
+  $('#clock').textContent = fmtT(v.t);
+  var st = $('#status');
+  var txt = v.ended ? 'Ended' : v.running ? 'Running' + (v.speed !== 1 ? ' at ' + v.speed + 'x' : '') : (v.t > 0 ? 'Paused' : 'Not started');
+  st.textContent = txt; st.className = 'pill' + (v.ended ? ' end' : v.running ? ' run' : '');
+}
+
+function join(role) {
+  app.link.send({ t: 'join', role: role, name: app.name || 'Player' });
+}
+function buildScreen() {
+  var root = $('#app');
+  if (app.screen === 'trainee') root.innerHTML = headerHtml() + '<div class="main">' + traineeHtml() + '</div>';
+  else if (app.screen === 'instr') root.innerHTML = headerHtml() + '<div class="main">' + instrHtml() + '</div>';
+  bindHeader();
+  if (app.screen === 'trainee') bindTrainee(); else if (app.screen === 'instr') bindInstr();
+  initMap();
+  if (app.view) { updateHeader(); if (app.screen === 'trainee') updateTrainee(true); else updateInstructor(true); }
+}
+function backToExercise() {
+  stopAarTimer(); app.screen = app.role === 'instructor' ? 'instr' : 'trainee'; buildScreen();
+}
+
+// ------------------------------------------------------------ lobby
+function renderLobby() {
+  var s = app.server;
+  var roles = [['instructor', 'Instructor', 'Run the exercise. Tune the degradation, inject jamming and spoofing, and watch decisions as they happen.']]
+    .concat(Object.keys(K.ROLES).map(function (r) { return [r, K.ROLES[r].label, ROLE_BLURB[r]]; }));
+  var modeLine = s
+    ? 'Multiplayer server found. Everyone who joins room <b>' + esc(app.room) + '</b> plays the same exercise from their own device.'
+    : 'No server found, so this runs on your device. You play one role at a time and can switch roles from the top bar. Use <b>Run demo</b> as instructor to watch a scripted team play.';
+  $('#app').innerHTML = '<div class="main"><div class="lobby"><h1>Kohra</h1>' +
+    '<p class="lede">Commanders rarely get the full picture. Kohra feeds each trainee delayed, missing and contradictory reports, then shows exactly what they knew when they decided.</p>' +
+    '<p class="modeline">' + modeLine + '</p>' +
+    '<div class="row"><label>Your name<input type="text" id="nm" maxlength="24" placeholder="Name" value="' + esc(app.name) + '"></label>' +
+    (s ? '<label>Room code<input type="text" id="rm" maxlength="12" value="' + esc(app.room) + '"></label>' : '') + '</div>' +
+    '<div class="roles">' + roles.map(function (r) {
+      var who = s && s.rooms && s.rooms[app.room] && s.rooms[app.room][r[0]] ? s.rooms[app.room][r[0]] + ' connected' : '';
+      return '<button class="role" data-role="' + r[0] + '"><span class="rn">' + esc(r[1]) + '</span><span class="rd">' + esc(r[2]) + '</span><span class="who">' + who + '</span></button>';
+    }).join('') + '</div></div></div>';
+  $$('.role').forEach(function (b) {
+    b.onclick = function () {
+      app.name = ($('#nm').value || '').trim() || (b.dataset.role === 'instructor' ? 'Instructor' : 'Trainee');
+      if (s) { app.room = (($('#rm') && $('#rm').value) || 'DEMO').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'DEMO'; app.link = new WsLink(app.room); app.mode = 'ws'; }
+      else { app.link = new LocalLink(); app.mode = 'local'; }
+      join(b.dataset.role);
+    };
+  });
+}
+
+// ------------------------------------------------------------ trainee screen
+function traineeHtml() {
+  var role = app.role, defs = app.scene.roles[role];
+  var acts = defs.orders.map(function (o) { return '<button data-type="' + o + '" aria-pressed="false">' + ORDER_LABEL[o] + '</button>'; }).join('');
+  var unitSel = defs.orders.some(function (o) { return NEEDS_UNIT[o]; })
+    ? '<label id="unitWrap">Unit<select id="unit">' + app.scene.units.map(function (u) { return '<option value="' + u.id + '"' + (u.id === 'B' ? ' selected' : '') + '>' + esc(u.name) + '</option>'; }).join('') + '</select></label>' : '';
+  var rat = app.scene.rationale.map(function (r) { return '<option>' + esc(r) + '</option>'; }).join('');
+  return '<div class="trainee">' +
+    '<section class="stage" id="stage"><canvas id="map" aria-label="Tactical map"></canvas>' +
+    '<div class="brief" id="brief"></div>' +
+    '<div class="legend"><span><i style="background:var(--friendly)"></i>Your units</span><span><i style="background:var(--hostile);transform:rotate(45deg)"></i>Reported enemy (fades with age)</span><span>Dashed ring: where it could be by now</span></div></section>' +
+    '<aside class="rail"><section class="panel"><h3>Links</h3><ul class="chans" id="chans"></ul></section>' +
+    '<section class="panel grow"><h3>Reports and team messages</h3><ol class="log" id="log"></ol>' +
+    '<form class="chatf" id="chatf"><input type="text" id="chat" maxlength="240" placeholder="Message the team" aria-label="Message the team"><button class="btn" type="submit">Send</button></form></section></aside>' +
+    '<section class="panel orders" id="orders"><div class="cols"><div><h3>Orders</h3><div class="seg" id="acts">' + acts + '</div>' +
+    '<div class="fields">' + unitSel + '<label>Why are you doing this?<select id="rat"><option value="">Choose a rationale</option>' + rat + '</select></label>' +
+    '<label>Note (optional)<input type="text" id="note" maxlength="200" placeholder="One line"></label></div>' +
+    '<div class="target" id="targetLine"></div><div id="hint" class="small muted"></div>' +
+    '<div class="fields" style="margin-top:8px"><button class="btn primary" id="send">Send order</button><button class="btn sm" id="clearT">Clear target</button></div>' +
+    '<div class="feedback" id="fb" aria-live="polite"></div></div>' +
+    '<div><h3>Recent orders</h3><ul class="olist" id="olist"></ul></div></div></section></div>';
+}
+function bindTrainee() {
+  $$('#acts button').forEach(function (b) {
+    b.onclick = function () { app.sel.type = b.dataset.type; app.feedback = null; updateOrderUi(); };
+  });
+  var u = $('#unit'); if (u) u.onchange = function () { app.sel.unit = u.value; updateOrderUi(); };
+  $('#clearT').onclick = function () { app.sel.target = null; updateOrderUi(); };
+  $('#send').onclick = sendOrder;
+  $('#chatf').onsubmit = function (e) { e.preventDefault(); var i = $('#chat'); if (!i.value.trim()) return; app.link.send({ t: 'chat', text: i.value }); i.value = ''; };
+  $('#log').onclick = function (e) {
+    var b = e.target.closest('button'); if (!b || !app.view) return;
+    var msg = app.view.messages.filter(function (x) { return x.id === b.dataset.id; })[0]; if (!msg || !msg.data.pos) return;
+    if (b.dataset.act === 'target') {
+      app.sel.target = { pos: msg.data.pos, cid: msg.data.cid, src: msg.src, sentAt: msg.sentAt };
+      if (!app.sel.type) { var first = app.scene.roles[app.role].orders.filter(function (o) { return NEEDS_POS[o]; })[0]; if (first) app.sel.type = first; }
+      updateOrderUi();
+    } else if (b.dataset.act === 'share') {
+      app.link.send({ t: 'chat', text: 'Passing on: ' + msg.text, share: { cid: msg.data.cid, pos: msg.data.pos, sentAt: msg.sentAt } });
+      toast('Shared with the team over the team net. It may be delayed or lost.');
+    }
+  };
+  $('#brief').onclick = function (e) { if (e.target.tagName === 'BUTTON') { app.briefOpen = !app.briefOpen; renderBrief(); } };
+  renderBrief();
+}
+function renderBrief() {
+  var b = $('#brief'); if (!b) return;
+  b.innerHTML = '<button class="btn sm">' + (app.briefOpen ? 'Hide' : 'Brief') + '</button><b>' + esc(app.scene.name) + '</b>' +
+    (app.briefOpen ? '<div>' + esc(app.scene.brief) + '</div><div class="muted" style="margin-top:4px">' + esc(ROLE_BLURB[app.role] || '') + '</div>' : '');
+}
+function sendOrder() {
+  var s = app.sel, v = app.view;
+  if (!s.type) { app.feedback = { ok: false, text: 'Choose an order first.' }; return updateOrderUi(); }
+  var rat = $('#rat').value;
+  if (!rat) { app.feedback = { ok: false, text: 'Choose a rationale. It goes into the after-action review.' }; return updateOrderUi(); }
+  var ord = { type: s.type };
+  if (NEEDS_UNIT[s.type]) ord.unit = s.unit;
+  if (NEEDS_POS[s.type]) { if (!s.target) { app.feedback = { ok: false, text: 'Click the map or choose a report to set the target.' }; return updateOrderUi(); } ord.pos = s.target.pos; ord.cid = s.target.cid || null; }
+  app.link.send({ t: 'order', order: ord, rationale: { tag: rat, note: $('#note').value } });
+  $('#note').value = '';
+}
+function ownInBlast(pos, exceptUnit) {
+  var hit = [];
+  if (!app.view) return hit;
+  app.view.units.forEach(function (u) { if (u.alive && u.id !== exceptUnit && K.dist([u.x, u.y], pos) <= app.scene.blast) hit.push(u.name); });
+  return hit;
+}
+function updateOrderUi() {
+  var s = app.sel, v = app.view;
+  $$('#acts button').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.type === s.type ? 'true' : 'false'); });
+  var uw = $('#unitWrap'); if (uw) uw.style.display = !s.type || NEEDS_UNIT[s.type] ? '' : 'none';
+  var h = $('#hint'); if (h) h.textContent = s.type ? ORDER_HINT[s.type] : 'Choose an order to begin.';
+  var line = '';
+  if (s.type && NEEDS_POS[s.type]) {
+    if (!s.target) line = 'No target yet. Click the map, or press "Use as target" on a report.';
+    else {
+      var pos = s.target.pos, t = v ? v.t : 0;
+      line = 'Target: <b>' + K.gridRef(pos) + '</b>' + (s.target.cid ? ' (' + esc(s.target.cid) + ', from ' + esc(s.target.src) + ', ' + fmtAge(t - s.target.sentAt) + ' old)' : ' (map point)');
+      if (s.type === 'fire' || s.type === 'strike') {
+        var own = ownInBlast(pos, s.type === 'fire' ? s.unit : null);
+        if (own.length) line += '<div class="warn">Your own forces are inside the blast radius: ' + esc(own.join(', ')) + '.</div>';
+        if (s.type === 'fire' && v) { var u = v.units.filter(function (x) { return x.id === s.unit; })[0]; if (u && K.dist([u.x, u.y], pos) > app.scene.fireRange) line += '<div class="warn">' + esc(u.name) + ' is out of range of this target.</div>'; }
+      }
+    }
+  }
+  $('#targetLine').innerHTML = line;
+  var fb = $('#fb'); if (fb) { fb.textContent = app.feedback ? app.feedback.text : ''; fb.className = 'feedback' + (app.feedback && !app.feedback.ok ? ' err' : ''); }
+  var send = $('#send'); if (send) send.disabled = !!(v && (v.ended || !v.running));
+}
+function updateTrainee(force) {
+  var v = app.view; if (!v || v.kind !== 'trainee') return;
+  if (v.running && !app._briefAuto) { app._briefAuto = true; app.briefOpen = false; renderBrief(); }
+  // channels
+  var rel = ['radio', 'datalink', 'cybernet', 'spectrum', 'teamnet'];
+  $('#chans').innerHTML = v.channels.map(function (c) {
+    var age = c.lastHeard == null ? null : v.t - c.lastHeard;
+    var frac = age == null ? 0 : Math.max(0, 1 - age / 90), cls = age == null || age > 60 ? 'low' : age > 25 ? 'mid' : '';
+    return '<li><span>' + esc(app.scene.channels[c.ch].label) + '</span><span class="bar ' + cls + '"><span style="width:' + Math.round(frac * 100) + '%"></span></span><span class="age">' + (age == null ? 'nothing yet' : fmtAge(age) + ' ago') + '</span></li>';
+  }).join('');
+  // log (newest first); rebuild only when message set changed
+  var key = v.messages.length ? v.messages[v.messages.length - 1].id + ':' + v.messages.length : '0';
+  if (force || key !== app._logKey) {
+    app._logKey = key;
+    var first = Object.keys(app.seen).length === 0;
+    $('#log').innerHTML = v.messages.slice().reverse().map(function (m) {
+      var fresh = !first && !app.seen[m.id];
+      var late = m.recvAt - m.sentAt;
+      var acts = m.data && m.data.pos ? '<div class="acts"><button class="btn sm" data-act="target" data-id="' + m.id + '">Use as target</button><button class="btn sm" data-act="share" data-id="' + m.id + '">Share with team</button></div>' : '';
+      return '<li class="msg ch-' + m.ch + (fresh ? ' fresh' : '') + '"><div class="meta"><span class="src' + (m.src.indexOf('Unconfirmed') === 0 ? ' unc' : '') + '">' + esc(m.src) + '</span><span>' +
+        (m.mine ? fmtT(m.sentAt) : 'sent ' + fmtAge(m.sentAt) + (late >= 8 ? ' (' + Math.round(late) + ' s late)' : '')) + '</span></div><p>' + esc(m.text) + '</p>' + acts + '</li>';
+    }).join('') || '<li class="muted small">Nothing received yet. Start the exercise from the Instructor screen.</li>';
+    v.messages.forEach(function (m) { app.seen[m.id] = 1; });
+  }
+  // recent orders
+  $('#olist').innerHTML = v.orders.slice().reverse().map(function (o) {
+    var age = v.t - o.t, st = o.ackedAt != null ? '<span class="st ok">acknowledged</span>' : age > 45 ? '<span class="st noack">no acknowledgement</span>' : '<span class="st wait">waiting</span>';
+    return '<li><span>' + fmtT(o.t) + ' ' + esc(o.text) + '</span>' + st + '</li>';
+  }).join('') || '<li class="muted">No orders yet.</li>';
+  // units dropdown: mark casualties
+  var u = $('#unit'); if (u) $$('option', u).forEach(function (o) { var un = v.units.filter(function (x) { return x.id === o.value; })[0]; if (un) o.textContent = un.name + (un.alive ? '' : ' (out of action)'); });
+  updateOrderUi();
+}
+
+// ------------------------------------------------------------ instructor screen
+function instrHtml() {
+  var chs = Object.keys(app.scene.channels);
+  var sliders = '<div class="h">Channel</div><div class="h">Delay (s)</div><div class="h">Loss (%)</div><div class="h">Conflict (%)</div>' + chs.map(function (c) {
+    return '<div>' + esc(app.scene.channels[c].label) + '</div>' +
+      '<input type="range" min="0" max="60" step="1" data-ch="' + c + '" data-key="delay" aria-label="' + esc(app.scene.channels[c].label) + ' delay">' +
+      '<input type="range" min="0" max="100" step="1" data-ch="' + c + '" data-key="dropout" aria-label="' + esc(app.scene.channels[c].label) + ' loss">' +
+      '<input type="range" min="0" max="100" step="1" data-ch="' + c + '" data-key="conflict" aria-label="' + esc(app.scene.channels[c].label) + ' conflict">';
+  }).join('');
+  return '<div class="instr"><section class="panel ictl"><div class="grp"><button class="btn primary" id="runBtn">Start</button>' +
+    '<label class="small muted">Speed <select id="speed"><option value="1">1x</option><option value="2">2x</option><option value="4">4x</option><option value="6">6x</option><option value="8">8x</option><option value="12">12x</option></select></label>' +
+    '<button class="btn" id="resetBtn">Reset</button></div><div class="grp"><button class="btn" id="demoBtn">Run demo (scripted team)</button></div>' +
+    '<div class="grp tog"><input type="checkbox" id="scripted"><label for="scripted">Scripted enemy events</label></div><span class="sp"></span><span class="muted small" id="roster"></span></section>' +
+    '<section class="stage" id="stage"><canvas id="map" aria-label="Ground truth map"></canvas>' +
+    '<div class="legend"><span><i style="background:var(--hostile);transform:rotate(45deg)"></i>Enemy, true position</span><span><i style="background:var(--friendly)"></i>Own units</span><span>Coloured dots: where each trainee believes the column is</span></div></section>' +
+    '<aside class="rail"><section class="panel"><h3>Degradation</h3><div class="seg" id="presets">' +
+    ['clear', 'light', 'moderate', 'contested'].map(function (p) { return '<button data-preset="' + p + '" aria-pressed="false">' + p.charAt(0).toUpperCase() + p.slice(1) + '</button>'; }).join('') + '</div>' +
+    '<div class="sliders" id="sliders">' + sliders + '</div></section>' +
+    '<section class="panel"><h3>Inject an event</h3><div class="injects">' +
+    '<button class="btn sm" data-inj="jam" data-ch="radio">Jam radio 60 s</button><button class="btn sm" data-inj="jam" data-ch="datalink">Jam datalink 60 s</button>' +
+    '<button class="btn sm" data-inj="spoof" data-ch="datalink">Spoof UAV positions 60 s</button><button class="btn sm" data-inj="intrusion">Enemy gains datalink access</button>' +
+    '<button class="btn sm" data-inj="outage" data-ch="teamnet">Cut team net 45 s</button><button class="btn sm" data-inj="clear">Clear all effects</button></div>' +
+    '<div class="chips" id="effects"></div><div class="small muted" id="upcoming" style="margin-top:8px"></div></section>' +
+    '<section class="panel grow"><h3>Decisions as they happen</h3><ul class="feed" id="feed"></ul></section></aside></div>';
+}
+function bindInstr() {
+  $('#runBtn').onclick = function () { app.link.send({ t: 'ctl', action: app.view && app.view.running ? 'pause' : 'start' }); };
+  $('#speed').onchange = function (e) { app.link.send({ t: 'ctl', action: 'speed', value: +e.target.value }); };
+  $('#resetBtn').onclick = function () { app.link.send({ t: 'ctl', action: 'reset' }); };
+  $('#demoBtn').onclick = function () { app.link.send({ t: 'ctl', action: 'demo', speed: 6 }); toast('Demo running at 6x. Open the after-action review when it ends.'); };
+  $('#scripted').onchange = function (e) { app.link.send({ t: 'ctl', action: 'scripted', value: e.target.checked }); };
+  $$('#presets button').forEach(function (b) { b.onclick = function () { app.link.send({ t: 'ctl', action: 'preset', value: b.dataset.preset }); }; });
+  var deb = {};
+  $$('#sliders input').forEach(function (inp) {
+    inp.oninput = function () {
+      var k = inp.dataset.ch + inp.dataset.key; clearTimeout(deb[k]);
+      deb[k] = setTimeout(function () { var val = +inp.value; if (inp.dataset.key !== 'delay') val = val / 100; app.link.send({ t: 'ctl', action: 'param', ch: inp.dataset.ch, key: inp.dataset.key, value: val }); }, 120);
+    };
+  });
+  $$('[data-inj]').forEach(function (b) {
+    b.onclick = function () {
+      var kind = b.dataset.inj, dur = kind === 'outage' ? 45 : 60;
+      app.link.send({ t: 'inject', kind: kind, ch: b.dataset.ch, dur: dur, strength: 0.9 });
+    };
+  });
+}
+function scoreClass(s) { return s == null ? 'na' : s >= 75 ? 'hi' : s >= 50 ? 'mid' : 'lo'; }
+function updateInstructor() {
+  var v = app.view; if (!v || v.kind !== 'instructor') return;
+  var rb = $('#runBtn'); rb.textContent = v.running ? 'Pause' : (v.t > 0 && !v.ended ? 'Resume' : 'Start'); rb.disabled = v.ended;
+  var sp = $('#speed'); if (document.activeElement !== sp) sp.value = String(v.speed);
+  var sc = $('#scripted'); if (document.activeElement !== sc) sc.checked = v.scripted;
+  $$('#presets button').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.preset === v.preset ? 'true' : 'false'); });
+  $$('#sliders input').forEach(function (inp) {
+    if (document.activeElement === inp) return;
+    var val = v.params[inp.dataset.ch][inp.dataset.key]; inp.value = inp.dataset.key === 'delay' ? val : Math.round(val * 100);
+  });
+  var names = Object.keys(v.roster).map(function (r) { return v.roster[r].length ? app.scene.roles[r].short + ': ' + v.roster[r].join(', ') : null; }).filter(Boolean);
+  $('#roster').textContent = names.length ? 'Joined: ' + names.join(' | ') : 'No trainees have joined yet';
+  $('#effects').innerHTML = v.effects.map(function (e) {
+    var lab = { jam: 'Jamming', outage: 'Cut', spoof: 'Spoofing', isolation: 'Isolated by cyber', hop: 'Frequency hop' }[e.kind] || e.kind;
+    return '<span class="chip">' + lab + ' on ' + esc(app.scene.channels[e.ch].label) + ' (' + Math.ceil(e.left) + ' s)</span>';
+  }).join('') + (v.intrusion && !v.intrusion.cleared ? '<span class="chip">Intrusion active' + (v.intrusion.detected ? ' (detected)' : ' (undetected)') + '</span>' : '');
+  var pend = v.upcoming.filter(function (u) { return !u.done; });
+  $('#upcoming').textContent = !v.scripted ? 'Scripted enemy events are off.' : pend.length ? 'Still to come: ' + pend.map(function (u) { return fmtT(u.at) + ' ' + u.note.charAt(0).toLowerCase() + u.note.slice(1); }).join('; ') : 'All scripted enemy events have played.';
+  $('#feed').innerHTML = v.decisions.slice().reverse().map(function (d) {
+    var res = d.outcome ? d.outcome.detail : (d.status === 'lost' ? 'lost in transit' : 'in transit');
+    return '<li><span class="score ' + scoreClass(d.score) + '">' + (d.score == null ? '..' : d.score) + '</span> ' + fmtT(d.t) + ' <b>' + esc(app.scene.roles[d.role].short) + '</b>: ' + esc(d.text) +
+      '<div class="muted small">' + esc(d.rationale.tag) + (d.rationale.note ? ' - ' + esc(d.rationale.note.replace(/\.$/, '')) : '') + '. Result: ' + esc(res) + (d.label ? '. ' + esc(d.label) : '') + '</div></li>';
+  }).join('') || '<li class="muted small">No decisions yet.</li>';
+}
+
+// ------------------------------------------------------------ map
+var colors = {};
+function refreshColors() {
+  var cs = getComputedStyle(document.documentElement);
+  ['paper', 'terrain', 'terrain2', 'water', 'ink', 'ink2', 'line', 'accent', 'friendly', 'hostile', 'cyber', 'ok', 'warn', 'bad', 'fog', 'hatch', 'panel'].forEach(function (k) { colors[k] = cs.getPropertyValue('--' + k).trim(); });
+}
+var mapState = { canvas: null, ctx: null, w: 0, h: 0, dpr: 1, raf: 0 };
+function initMap() {
+  cancelAnimationFrame(mapState.raf);
+  var c = $('#map'); if (!c) return;
+  refreshColors();
+  mapState.canvas = c; mapState.ctx = c.getContext('2d');
+  c.onclick = mapClick;
+  function loop(ts) { mapState.raf = requestAnimationFrame(loop); drawMap(ts); }
+  mapState.raf = requestAnimationFrame(loop);
+}
+function xf() {
+  var m = app.scene.map, cw = mapState.w, ch = mapState.h, pad = 26;
+  var sc = Math.min((cw - pad * 2) / m.w, (ch - pad * 2) / m.h);
+  return { s: sc, ox: (cw - m.w * sc) / 2, oy: (ch - m.h * sc) / 2 + 6 };
+}
+function mapClick(e) {
+  if (app.screen !== 'trainee' || !app.view) return;
+  var r = mapState.canvas.getBoundingClientRect(), t = xf();
+  var x = ((e.clientX - r.left) - t.ox) / t.s, y = ((e.clientY - r.top) - t.oy) / t.s;
+  var m = app.scene.map; if (x < 0 || y < 0 || x > m.w || y > m.h) return;
+  var best = null, bd = 3.5;
+  app.view.contacts.forEach(function (c) { var d = K.dist(c.pos, [x, y]); if (d < bd) { bd = d; best = c; } });
+  if (best) app.sel.target = { pos: best.pos.slice(), cid: best.cid, src: best.src, sentAt: best.sentAt };
+  else app.sel.target = { pos: [Math.round(x * 10) / 10, Math.round(y * 10) / 10], cid: null };
+  if (!app.sel.type) { var f = app.scene.roles[app.role].orders.filter(function (o) { return NEEDS_POS[o]; })[0]; if (f) app.sel.type = f; }
+  updateOrderUi();
+}
+function fitCanvas() {
+  var c = mapState.canvas, r = c.parentNode.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  var w = Math.max(100, Math.floor(r.width)), h = Math.max(100, Math.floor(r.height));
+  if (c.width !== Math.floor(w * dpr) || c.height !== Math.floor(h * dpr)) { c.width = Math.floor(w * dpr); c.height = Math.floor(h * dpr); }
+  mapState.w = w; mapState.h = h; mapState.dpr = dpr;
+}
+function ellipsePath(ctx, t, x, y, rx, ry) { ctx.beginPath(); ctx.ellipse(t.ox + x * t.s, t.oy + y * t.s, rx * t.s, ry * t.s, 0, 0, Math.PI * 2); }
+function drawMap(ts) {
+  if (!mapState.canvas || !document.body.contains(mapState.canvas) || !app.scene) return;
+  fitCanvas();
+  var ctx = mapState.ctx, cw = mapState.w, ch = mapState.h, t = xf(), sc = app.scene, m = sc.map, v = app.view;
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  ctx.setTransform(mapState.dpr, 0, 0, mapState.dpr, 0, 0);
+  ctx.fillStyle = colors.paper; ctx.fillRect(0, 0, cw, ch);
+  ctx.fillStyle = colors.terrain; ctx.fillRect(t.ox, t.oy, m.w * t.s, m.h * t.s);
+  // grid
+  ctx.strokeStyle = colors.line; ctx.lineWidth = 0.6; ctx.fillStyle = colors.ink2; ctx.font = '11px ' + 'Segoe UI, system-ui, sans-serif'; ctx.textAlign = 'center';
+  for (var i = 0; i <= 10; i++) { var gx = t.ox + i * 10 * t.s; ctx.beginPath(); ctx.moveTo(gx, t.oy); ctx.lineTo(gx, t.oy + m.h * t.s); ctx.stroke(); if (i < 10) ctx.fillText(String.fromCharCode(65 + i), gx + 5 * t.s, t.oy - 8); }
+  ctx.textAlign = 'right';
+  for (var j = 0; j <= 6; j++) { var gy = t.oy + j * 10 * t.s; ctx.beginPath(); ctx.moveTo(t.ox, gy); ctx.lineTo(t.ox + m.w * t.s, gy); ctx.stroke(); if (j < 6) ctx.fillText(String(j + 1), t.ox - 7, gy + 5 * t.s + 4); }
+  // river and bridge
+  ctx.fillStyle = colors.water; ctx.fillRect(t.ox, t.oy + m.river.y * t.s, m.w * t.s, m.river.h * t.s);
+  ctx.fillStyle = colors.ink2; ctx.fillRect(t.ox + (m.bridge.x - 2) * t.s, t.oy + (m.river.y - 0.4) * t.s, 4 * t.s, (m.river.h + 0.8) * t.s);
+  // features
+  m.features.forEach(function (f) {
+    if (f.k === 'ridge') { ellipsePath(ctx, t, f.x, f.y, f.rx, f.ry); ctx.fillStyle = colors.terrain2; ctx.fill(); ctx.strokeStyle = colors.hatch; ctx.lineWidth = 1; ctx.stroke(); ellipsePath(ctx, t, f.x, f.y, f.rx * 0.6, f.ry * 0.55); ctx.stroke(); }
+    else if (f.k === 'wood') { ctx.fillStyle = colors.terrain2; for (var q = 0; q < 14; q++) { var a = q * 2.399, r = Math.sqrt(q / 14); ctx.beginPath(); ctx.arc(t.ox + (f.x + Math.cos(a) * f.rx * r) * t.s, t.oy + (f.y + Math.sin(a) * f.ry * r) * t.s, 1.1 * t.s, 0, 7); ctx.fill(); } }
+    else if (f.k === 'village') { ctx.fillStyle = colors.hatch; [[-1.5, -1], [0.5, -1.2], [-0.5, 0.8], [1.8, 0.6]].forEach(function (o) { ctx.fillRect(t.ox + (f.x + o[0]) * t.s, t.oy + (f.y + o[1]) * t.s, 1.4 * t.s, 1.1 * t.s); }); }
+  });
+  ctx.fillStyle = colors.ink2; ctx.textAlign = 'center';
+  m.labels.forEach(function (l) { ctx.font = (l.water ? 'italic ' : 'italic ') + Math.max(11, 1.9 * t.s) + 'px Iowan Old Style, Palatino, Georgia, serif'; ctx.fillStyle = l.water ? colors.ink2 : colors.ink2; ctx.fillText(l.t, t.ox + l.x * t.s, t.oy + l.y * t.s); });
+  if (!v) return;
+
+  // fog (trainee)
+  if (v.kind === 'trainee') {
+    var ages = v.channels.filter(function (c) { return c.ch !== 'teamnet'; }).map(function (c) { return c.lastHeard == null ? Math.min(90, v.t) : v.t - c.lastHeard; });
+    var avg = ages.length ? ages.reduce(function (a, b) { return a + b; }, 0) / ages.length : 0;
+    var fog = Math.max(0, Math.min(1, avg / 80));
+    app._fog = (app._fog == null ? fog : app._fog + (fog - app._fog) * 0.05);
+    var tt = reduce ? 0 : ts / 1000;
+    ctx.save(); ctx.beginPath(); ctx.rect(t.ox, t.oy, m.w * t.s, m.h * t.s); ctx.clip();
+    for (var b = 0; b < 12; b++) {
+      var bx = (b * 37 % 100) + Math.sin(tt * 0.12 + b) * 6, by = ((b * 23) % 60) + Math.cos(tt * 0.1 + b * 1.7) * 4, br = (14 + (b % 4) * 4) * t.s;
+      var g = ctx.createRadialGradient(t.ox + bx * t.s, t.oy + by * t.s, 0, t.ox + bx * t.s, t.oy + by * t.s, br);
+      var al = (0.06 + app._fog * 0.42) * (by < 30 ? 1.15 : 0.8);
+      g.addColorStop(0, hexA(colors.fog, al)); g.addColorStop(1, hexA(colors.fog, 0));
+      ctx.fillStyle = g; ctx.fillRect(t.ox, t.oy, m.w * t.s, m.h * t.s);
+    }
+    ctx.restore();
+  }
+
+  // target + blast
+  if (v.kind === 'trainee' && app.sel.target && app.sel.type && NEEDS_POS[app.sel.type]) {
+    var tp = app.sel.target.pos, px = t.ox + tp[0] * t.s, py = t.oy + tp[1] * t.s;
+    if (app.sel.type === 'fire' || app.sel.type === 'strike') {
+      ctx.beginPath(); ctx.arc(px, py, app.scene.blast * t.s, 0, 7); ctx.fillStyle = hexA(colors.bad, 0.12); ctx.fill(); ctx.strokeStyle = colors.bad; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
+    } else if (app.sel.type === 'recce') { ctx.beginPath(); ctx.arc(px, py, 15 * t.s, 0, 7); ctx.strokeStyle = colors.friendly; ctx.lineWidth = 1.2; ctx.setLineDash([3, 5]); ctx.stroke(); ctx.setLineDash([]); }
+    ctx.strokeStyle = colors.ink; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(px - 9, py); ctx.lineTo(px + 9, py); ctx.moveTo(px, py - 9); ctx.lineTo(px, py + 9); ctx.stroke();
+  }
+
+  // enemy: believed (trainee) or truth (instructor)
+  function diamond(x, y, r, fill, stroke, dash, alpha) {
+    ctx.save(); ctx.globalAlpha = alpha; ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath();
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); } ctx.strokeStyle = stroke; ctx.lineWidth = 1.8; ctx.setLineDash(dash ? [3, 3] : []); ctx.stroke(); ctx.restore();
+  }
+  if (v.kind === 'trainee') {
+    var lblN = {};
+    v.contacts.forEach(function (c) {
+      var lblI = lblN[c.cid] = (lblN[c.cid] == null ? 0 : lblN[c.cid] + 1);
+      var age = v.t - c.sentAt, x = t.ox + c.pos[0] * t.s, y = t.oy + c.pos[1] * t.s, alpha = Math.max(0.3, Math.min(1, 1 - age / 170));
+      var rad = Math.max(0.8, Math.min(22, age * 0.1)) * t.s;
+      ctx.save(); ctx.globalAlpha = alpha * 0.8; ctx.beginPath(); ctx.arc(x, y, rad, 0, 7); ctx.strokeStyle = colors.hostile; ctx.lineWidth = 1; ctx.setLineDash([2, 4]); ctx.stroke(); ctx.restore();
+      var unc = c.src.indexOf('Unconfirmed') === 0;
+      diamond(x, y, 7, unc ? null : colors.hostile, colors.hostile, unc, alpha);
+      ctx.save(); ctx.globalAlpha = Math.max(0.55, alpha); ctx.fillStyle = colors.ink; ctx.font = '600 11px Segoe UI, system-ui, sans-serif'; ctx.textAlign = 'left';
+      ctx.fillText(c.cid + ' | ' + c.src.replace('Unconfirmed source', 'Unconfirmed').replace('Relayed by ', 'via ') + ' | ' + fmtAge(age), x + 11, y + 4 + 13 * lblI); ctx.restore();
+    });
+  } else {
+    v.contacts.forEach(function (c) {
+      if (c.hidden) return;
+      var x = t.ox + c.x * t.s, y = t.oy + c.y * t.s;
+      if (!c.alive) { ctx.strokeStyle = colors.ink2; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - 6, y - 6); ctx.lineTo(x + 6, y + 6); ctx.moveTo(x + 6, y - 6); ctx.lineTo(x - 6, y + 6); ctx.stroke(); }
+      else diamond(x, y, 8, colors.hostile, colors.hostile, false, 1);
+      ctx.fillStyle = colors.ink; ctx.font = '600 11px Segoe UI, system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.fillText(c.id + ' ' + c.name, x + 12, y + 4);
+    });
+    var e1 = v.contacts.filter(function (c) { return c.id === 'E1'; })[0];
+    Object.keys(v.beliefsE1 || {}).forEach(function (r) {
+      var b = v.beliefsE1[r], bx = t.ox + b.pos[0] * t.s, by = t.oy + b.pos[1] * t.s;
+      if (e1 && e1.alive) { ctx.strokeStyle = ROLE_COLOR[r]; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(t.ox + e1.x * t.s, t.oy + e1.y * t.s); ctx.stroke(); ctx.setLineDash([]); }
+      ctx.fillStyle = ROLE_COLOR[r]; ctx.beginPath(); ctx.arc(bx, by, 5, 0, 7); ctx.fill();
+      ctx.fillStyle = colors.ink; ctx.font = '11px Segoe UI, system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.fillText(app.scene.roles[r].short, bx + 8, by - 6 - 12 * Object.keys(v.beliefsE1).indexOf(r));
+    });
+  }
+  // own units
+  v.units.forEach(function (u) {
+    var x = t.ox + u.x * t.s, y = t.oy + u.y * t.s;
+    if (u.tx != null) { ctx.strokeStyle = colors.friendly; ctx.lineWidth = 1; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(t.ox + u.tx * t.s, t.oy + u.ty * t.s); ctx.stroke(); ctx.setLineDash([]); }
+    ctx.fillStyle = u.alive ? colors.friendly : colors.ink2; ctx.fillRect(x - 8, y - 8, 16, 16);
+    ctx.fillStyle = '#fff'; ctx.font = '700 11px Segoe UI, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(u.id, x, y + 4);
+    ctx.fillStyle = colors.ink; ctx.font = '11px Segoe UI, system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.fillText(u.name + (u.alive ? '' : ' (out of action)'), x + 12, y + 4);
+  });
+  if (v.ended) { ctx.fillStyle = hexA(colors.panel, 0.85); ctx.fillRect(t.ox + m.w * t.s / 2 - 230, t.oy + 12, 460, 34); ctx.fillStyle = colors.ink; ctx.font = '600 13px Segoe UI, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(v.endReason, t.ox + m.w * t.s / 2, t.oy + 34); }
+}
+function hexA(col, a) {
+  col = (col || '#888888').trim();
+  var r, g, b, mm;
+  if ((mm = /^#([0-9a-f]{6})$/i.exec(col))) { r = parseInt(mm[1].slice(0, 2), 16); g = parseInt(mm[1].slice(2, 4), 16); b = parseInt(mm[1].slice(4, 6), 16); }
+  else if ((mm = /^#([0-9a-f]{3})$/i.exec(col))) { r = parseInt(mm[1][0] + mm[1][0], 16); g = parseInt(mm[1][1] + mm[1][1], 16); b = parseInt(mm[1][2] + mm[1][2], 16); }
+  else return col;
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+}
+if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener && matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () { setTimeout(refreshColors, 30); });
+
+// ------------------------------------------------------------ AAR
+function stopAarTimer() { clearInterval(app.aarTimer); app.aarTimer = null; }
+function openAar() {
+  app.screen = 'aar'; app.aar = null;
+  $('#app').innerHTML = headerHtml() + '<div class="main"><div class="aar" id="aarRoot"><p class="muted">Preparing the review...</p></div></div>';
+  bindHeader(); $('#aarBtn').textContent = 'Back to exercise'; updateHeader();
+  app.link.send({ t: 'getAar' });
+  stopAarTimer(); app.aarTimer = setInterval(function () { if (app.view && !app.view.ended) app.link.send({ t: 'getAar' }); }, 2500);
+}
+function roleName(r) { return app.scene.roles[r].label; }
+function outcomeWord(o) { return o === 'success' ? 'Mission succeeded' : o === 'failure' ? 'Mission failed' : 'Not decided'; }
+function renderAar() {
+  var r = app.aar, root = $('#aarRoot'); if (!r || !root) return;
+  var T = r.team, scroll = window.scrollY;
+  var tiles = [
+    [outcomeWord(T.outcome), T.reason], [T.avgScore == null ? '-' : T.avgScore, 'Average decision quality (0-100)'], [T.decisions, 'Orders issued'],
+    [T.fratricide, 'Fratricide incidents'], [T.ordersLost, 'Orders lost in transit'], [T.commsDelivered == null ? '-' : T.commsDelivered + '%', 'Reports that arrived'], [T.teamMessages, 'Team messages sent']
+  ].map(function (x) { return '<div class="tile"><div class="v">' + esc(x[0]) + '</div><div class="l">' + esc(x[1]) + '</div></div>'; }).join('');
+
+  root.innerHTML = '<h1 style="font-size:30px">After-action review</h1><div class="muted">' + esc(r.meta.scenario) + ', ' + esc(r.meta.preset) + ' degradation, ' + fmtT(r.meta.duration) + (r.meta.ended ? '' : ' (exercise still running)') + '</div>' +
+    '<div class="tiles">' + tiles + '</div>' +
+    '<h2>What each role believed versus what was true</h2><div class="muted small">Distance between where the role thought the armoured column was and where it really was. Higher means a bigger gap in the picture.</div>' +
+    chartSvg(r) + '<ol class="evlist">' + eventList(r).map(function (e) { return '<li>' + fmtT(e.t) + ' ' + esc(e.text) + '</li>'; }).join('') + '</ol>' +
+    '<h2>How the links behaved</h2><div class="scroll"><table><thead><tr><th>Link</th><th>Sent</th><th>Arrived</th><th>Lost</th><th>Late (8 s or more)</th><th>Average delay</th><th>Contradicting copies</th><th>Spoofed</th></tr></thead><tbody>' +
+    Object.keys(r.channels).map(function (c) { var x = r.channels[c]; return '<tr><td>' + esc(app.scene.channels[c].label) + '</td><td>' + x.attempts + '</td><td>' + x.delivered + '</td><td>' + x.dropped + '</td><td>' + x.delayed + '</td><td>' + x.avgDelay + ' s</td><td>' + x.conflicting + '</td><td>' + x.spoofed + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+    '<h2>By role</h2><div class="scroll"><table><thead><tr><th>Role</th><th>Played by</th><th>Orders</th><th>Average quality</th><th>Reports received</th><th>Reports lost</th></tr></thead><tbody>' +
+    Object.keys(r.perRole).map(function (k) { var p = r.perRole[k]; return '<tr><td>' + esc(p.label) + '</td><td>' + esc(p.players.join(', ') || (r.meta.demo ? 'Demo team' : '-')) + '</td><td>' + p.decisions + '</td><td>' + (p.avgScore == null ? '-' : p.avgScore) + '</td><td>' + p.delivered + '</td><td>' + p.dropped + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+    '<h2>Decision timeline</h2><div class="scroll"><table><thead><tr><th>Time</th><th>Role</th><th>Order and reasoning</th><th>What they knew</th><th>Result</th><th>Quality</th></tr></thead><tbody>' +
+    (r.decisions.map(decisionRow).join('') || '<tr><td colspan="6" class="muted">No orders were issued.</td></tr>') + '</tbody></table></div>' +
+    '<div class="muted small" style="margin-top:8px">Quality combines the outcome against ground truth with how well the order matched the information the trainee had: acting firmly on confirmed reports scores well, committing on thin or contradictory reports does not, and verifying under doubt is rewarded.</div>' +
+    '<h2 class="noprint">Export</h2><div class="exports noprint"><button class="btn" id="xJson">Download JSON</button><button class="btn" id="xCsv">Download CSV</button><button class="btn" id="xPrint">Print or save as PDF</button><button class="btn" id="xShow">Show CSV text</button></div>' +
+    '<textarea class="raw noprint" id="rawBox" readonly hidden aria-label="CSV text"></textarea>';
+  $('#xJson').onclick = function () { download('kohra-aar.json', JSON.stringify(r, null, 2), 'application/json'); };
+  $('#xCsv').onclick = function () { download('kohra-aar.csv', aarCsv(r), 'text/csv'); };
+  $('#xPrint').onclick = function () { window.print(); };
+  $('#xShow').onclick = function () { var b = $('#rawBox'); b.hidden = !b.hidden; b.value = aarCsv(r); if (!b.hidden) b.select(); };
+  window.scrollTo(0, scroll);
+}
+function eventList(r) { return r.events.filter(function (e) { return e.kind === 'degrade' || e.kind === 'bad' || e.kind === 'good'; }); }
+function decisionRow(d) {
+  var k = d.knowledge, kn;
+  if (k) kn = 'Confidence ' + Math.round(k.confidence * 100) + '%' + (k.freshestAge == null ? ', no recent reports' : ', freshest report ' + Math.round(k.freshestAge) + ' s old') + (k.contradictory ? ', reports disagreed' : '') + (k.beliefError != null ? ', believed target ' + k.beliefError + ' units from the truth' : '') + '. ' + k.reports + ' report(s) in the last 2 min.';
+  else kn = 'Not position-based.';
+  var res = d.outcome ? d.outcome.detail : 'Still in transit';
+  return '<tr><td>' + fmtT(d.t) + '</td><td>' + esc(app.scene.roles[d.role].short) + '</td><td><b>' + esc(d.text) + '</b><div class="kn">' + esc(d.rationale.tag) + (d.rationale.note ? ': ' + esc(d.rationale.note) : '') + (d.transit ? '. Took ' + Math.round(d.transit) + ' s to arrive.' : '') + '</div></td><td class="kn">' + esc(kn) + '</td><td>' + esc(res) + '<div class="kn">' + esc(d.label || '') + '</div></td><td><span class="score ' + scoreClass(d.score) + '">' + (d.score == null ? '-' : d.score) + '</span></td></tr>';
+}
+function chartSvg(r) {
+  var W = 940, H = 280, L = 44, R = 12, T = 14, B = 34, maxT = Math.max(120, Math.ceil(r.meta.duration / 60) * 60), maxE = 40;
+  var X = function (t) { return L + (W - L - R) * t / maxT; }, Y = function (e) { return T + (H - T - B) * (1 - Math.min(e, maxE) / maxE); };
+  var s = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Belief error per role over time">';
+  for (var e = 0; e <= maxE; e += 10) s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(e) + '" y2="' + Y(e) + '" stroke="var(--line)" stroke-width="0.7"/><text x="' + (L - 6) + '" y="' + (Y(e) + 4) + '" text-anchor="end" font-size="11" fill="var(--ink2)">' + e + '</text>';
+  for (var t = 0; t <= maxT; t += 60) s += '<text x="' + X(t) + '" y="' + (H - 12) + '" text-anchor="' + (t >= maxT ? 'end' : 'middle') + '" font-size="11" fill="var(--ink2)">' + fmtT(t) + '</text>';
+  eventList(r).forEach(function (ev, i) { s += '<line x1="' + X(ev.t) + '" x2="' + X(ev.t) + '" y1="' + T + '" y2="' + (H - B) + '" stroke="' + (ev.kind === 'degrade' ? 'var(--warn)' : ev.kind === 'bad' ? 'var(--bad)' : 'var(--ok)') + '" stroke-dasharray="4 4" stroke-width="1"/>'; });
+  Object.keys(r.series).forEach(function (role) {
+    var seg = [], pts = r.series[role], d = '';
+    pts.forEach(function (p) { if (p.err == null) { if (seg.length) { d += 'M' + seg.join('L'); seg = []; } } else seg.push(X(p.t).toFixed(1) + ' ' + Y(p.err).toFixed(1)); });
+    if (seg.length) d += 'M' + seg.join('L');
+    if (d) s += '<path d="' + d + '" fill="none" stroke="' + ROLE_COLOR[role] + '" stroke-width="2.2"/>';
+  });
+  s += '</svg><div class="keys">' + Object.keys(r.series).map(function (k) { return '<span><i style="background:' + ROLE_COLOR[k] + '"></i>' + esc(app.scene.roles[k].short) + '</span>'; }).join('') +
+    '<span><i style="background:var(--warn)"></i>Degradation began</span><span><i style="background:var(--ok)"></i>Enemy destroyed</span><span><i style="background:var(--bad)"></i>Failure or fratricide</span></div>';
+  return s;
+}
+function csvCell(v) { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+function aarCsv(rep) {
+  var head = ['id', 't', 'role', 'order', 'rationale', 'note', 'transit_s', 'status', 'outcome', 'detail', 'score', 'label', 'confidence', 'freshest_report_age_s', 'belief_error', 'contradictory_reports'];
+  var rows = rep.decisions.map(function (d) { var k = d.knowledge || {}; return [d.id, d.t, d.role, d.text, d.rationale.tag, d.rationale.note, d.transit, d.status, d.outcome ? d.outcome.kind : '', d.outcome ? d.outcome.detail : '', d.score, d.label, k.confidence, k.freshestAge, k.beliefError, k.contradictory]; });
+  return [head].concat(rows).map(function (r) { return r.map(csvCell).join(','); }).join('\n');
+}
+function download(name, text, type) {
+  try {
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: type })); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    toast('If nothing downloaded, use "Show CSV text" and copy it from the box.');
+  } catch (e) { toast('Download is not available here. Use "Show CSV text" and copy it.'); }
+}
+
+// ------------------------------------------------------------ boot
+detectServer().then(function (info) {
+  app.server = info; if (info && qs.get('room')) app.room = qs.get('room').toUpperCase();
+  app.scene = { name: 'Op Ridge Crossing' };
+  renderLobby();
+});
+window.__kohra = app; // handy for debugging and tests
+})();
+</script>
+</body>
+</html>

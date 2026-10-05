@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run KOHRA server (port 8080)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/server.js",
+      "args": ["8080"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Run engine checks",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/test_engine.js",
+      "console": "integratedTerminal"
+    }
+  ]
+}
